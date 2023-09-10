@@ -57,7 +57,7 @@ def DrawMatrix_111(x, y, matL, matCb, matCr):
             x2, y2 = (x * 8 + (xx + 1)) * 2, (y * 8 + (yy + 1)) * 2
             w.create_rectangle(x1, y1, x2, y2, fill=c, outline=c)
 
-def DrawMatrix_411(x, y, matL, matCb, matCr):
+def DrawMatrix_411(x, y, matL, matCb, matCr, height, width):
     """
     Loops over a single 8x8 MCU and draws it on Tkinter canvas
     """
@@ -89,8 +89,70 @@ def DrawMatrix_411(x, y, matL, matCb, matCr):
                     c = "#%02x%02x%02x" % ColorConversion(matL[i*2+j][yy][xx], Cb[i*2+j][yy][xx], Cr[i*2+j][yy][xx])
                     x1, y1 = (x * 16 + 8 * j + xx), (y * 16 + 8 * i + yy)
                     x2, y2 = (x1+1), (y1+1)
+                    if x1<width and y1<height:
+                        w.create_rectangle(x1, y1, x2, y2, fill=c, outline=c)
+
+def DrawMatrix_h211(x, y, matL, matCb, matCr, height, width):
+    """
+    Loops over a single 8x8 MCU and draws it on Tkinter canvas
+    """
+    
+    Cb = np.zeros((2,8,8), dtype=int)
+    
+    for j in range(2):
+        for yy in range(8):
+            for xx in range(4):
+                Cb[j][yy][2*xx] = matCb[yy][4*j+xx]
+                Cb[j][yy][2*xx+1] = matCb[yy][4*j+xx]
+                
+          
+    Cr = np.zeros((2,8,8), dtype=int)
+    
+    for j in range(2):
+        for yy in range(8):
+            for xx in range(4):
+                Cr[j][yy][2*xx] = matCr[yy][4*j+xx]
+                Cr[j][yy][2*xx+1] = matCr[yy][4*j+xx]              
+    
+    for j in range(2):
+        for yy in range(8):
+            for xx in range(8):
+                c = "#%02x%02x%02x" % ColorConversion(matL[j][yy][xx], Cb[j][yy][xx], Cr[j][yy][xx])
+                x1, y1 = (x * 16 + 8 * j + xx), (y * 8 + yy)
+                x2, y2 = (x1+1), (y1+1)
+                if x1<width and y1<height:
                     w.create_rectangle(x1, y1, x2, y2, fill=c, outline=c)
-            
+
+def DrawMatrix_v211(x, y, matL, matCb, matCr, height, width):
+    """
+    Loops over a single 8x8 MCU and draws it on Tkinter canvas
+    """
+    
+    Cb = np.zeros((2,8,8), dtype=int)
+    
+    for j in range(2):
+        for yy in range(4):
+            for xx in range(8):
+                Cb[j][2*yy][xx] = matCb[4*j+yy][xx]
+                Cb[j][2*yy+1][xx] = matCb[4*j+yy][xx]
+                
+          
+    Cr = np.zeros((2,8,8), dtype=int)
+    
+    for j in range(2):
+        for yy in range(4):
+            for xx in range(8):
+                Cr[j][2*yy][xx] = matCr[4*j+yy][xx]
+                Cr[j][2*yy][xx] = matCr[4*j+yy][xx]              
+    
+    for j in range(2):
+        for yy in range(8):
+            for xx in range(8):
+                c = "#%02x%02x%02x" % ColorConversion(matL[j][yy][xx], Cb[j][yy][xx], Cr[j][yy][xx])
+                x1, y1 = (x * 8 + xx), (y * 16 + 8 * j + yy)
+                x2, y2 = (x1+1), (y1+1)
+                if x1<width and y1<height:
+                    w.create_rectangle(x1, y1, x2, y2, fill=c, outline=c)               
 def RemoveFF00(data):
     """
     Removes 0x00 after 0xff in the image scan section of JPEG
@@ -317,13 +379,16 @@ class JPEG:
         
         Hmax = max(self.sampling[0]//16, self.sampling[1]//16, self.sampling[2]//16)
         Vmax = max(self.sampling[0]%16, self.sampling[1]%16, self.sampling[2]%16)
-        if self.sampling[0] == 17 and self.sampling[1] == 17 and self.sampling[2] == 17:
+        if Hmax==1 and Vmax==1:
             flag = 1 # Y:Cb:Cr=1:1:1
-        elif self.sampling[0] == 34 and self.sampling[1] == 17 and self.sampling[2] == 17:
+        elif Hmax==2 and Vmax==2:
             flag = 2 # Y:Cb:Cr=4:1:1
+        elif Hmax==2 and Vmax==1: 
+            flag = 3 # Y:Cb:Cr=2:1:1 mcu = height:8, width:16
+        elif Hmax==1 and Vmax==2:
+            flag = 4 # Y:Cb:Cr=2:1:1 mcu = height:16, width:8
         else:
             flag = 0
-            
             
         print("Hmax: ", Hmax, ", Vmax: ", Vmax)
         mcu_hCnt = math.ceil(self.width / (8 * Hmax)) # horizontal
@@ -350,7 +415,19 @@ class JPEG:
                     L[3] = matL.base
                     matCr, oldCrdccoeff = self.BuildMatrix(st, 1, self.quant[self.quantMapping[1]], oldCrdccoeff)
                     matCb, oldCbdccoeff = self.BuildMatrix(st, 1, self.quant[self.quantMapping[2]], oldCbdccoeff)
-                    DrawMatrix_411(x, y, L, matCb.base, matCr.base)
+                    DrawMatrix_411(x, y, L, matCb.base, matCr.base, self.height, self.width)
+                elif flag == 3 or flag == 4:
+                    L = np.zeros((2,8,8), dtype=int)
+                    matL, oldlumdccoeff = self.BuildMatrix(st, 0, self.quant[self.quantMapping[0]], oldlumdccoeff)
+                    L[0] = matL.base
+                    matL, oldlumdccoeff = self.BuildMatrix(st, 0, self.quant[self.quantMapping[0]], oldlumdccoeff)
+                    L[1] = matL.base
+                    matCr, oldCrdccoeff = self.BuildMatrix(st, 1, self.quant[self.quantMapping[1]], oldCrdccoeff)
+                    matCb, oldCbdccoeff = self.BuildMatrix(st, 1, self.quant[self.quantMapping[2]], oldCbdccoeff)
+                    if flag==3:
+                        DrawMatrix_h211(x, y, L, matCb.base, matCr.base, self.height, self.width)
+                    else:
+                        DrawMatrix_v211(x, y, L, matCb.base, matCr.base, self.height, self.width)
         return lenchunk + hdrlen
 
     def BaselineDCT(self, data):
@@ -359,6 +436,7 @@ class JPEG:
 
         for i in range(components):
             id, samp, QtbId = unpack("BBB", data[6 + i * 3 : 9 + i * 3])
+            print("id, samp, Qtbid: ", id, samp, QtbId)
             self.sampling.append(samp)
             self.quantMapping.append(QtbId)
 
@@ -412,8 +490,9 @@ if __name__ == "__main__":
     from tkinter import Tk, Canvas, mainloop
 
     master = Tk()
-    w = Canvas(master, width=3000, height=3000)
+    w = Canvas(master, width=5000, height=5000)
     w.pack()
-    img = JPEG("profile.jpg")
+    
+    img = JPEG("fish.jpg")
     img.decode()
     mainloop()
